@@ -3,9 +3,9 @@
  * Author: Julio Echeverri - Isabel Cardona
  */ 
 
-#include "OrangutanMotors/OrangutanMotors.h"
-#include "TimerOne/TimerOne.h"
-#include "PololuQTRSensors/PololuQTRSensors.h"
+#include <OrangutanMotors.h>
+#include <PololuQTRSensors.h>
+#include <TimerOne.h>
 
 #define NUM_SENSORS             6  // numero de sensores utilizados
 #define NUM_SAMPLES_PER_SENSOR  4  // La lectura del sensor será el premedio de 4 muestras
@@ -82,6 +82,19 @@ void loop()
 	while(digitalRead(START_BUTTON)); // presionar el botón para iniciar la carrera
 }
 
+
+void CalibracionMotores()
+{
+	// giro en sentido horario
+	motores.setSpeeds(-60,60);
+	for (int i = 0; i < 20; i++)
+		qtra.calibrate();
+		
+	// giro en sentido anti-horario
+	motores.setSpeeds(60,-60);
+	for (int i = 0; i < 20; i++)
+		qtra.calibrate();
+}
 
 void CalculoControlador()
 {
@@ -213,3 +226,8 @@ void ControllerCompute()
 */
 
 
+/*  Alternative way of calling the library 
+#include "OrangutanMotors/OrangutanMotors.h"
+#include "TimerOne/TimerOne.h"
+#include "PololuQTRSensors/PololuQTRSensors.h"
+*/
