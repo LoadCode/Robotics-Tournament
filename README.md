@@ -4,8 +4,8 @@ Este proyecto corresponde al desarrollo del software del robot denominado **Halc
 
 
 ### Desarrolladores
-*	Isabel Cristina Cardona S.
-*	Julio César Echeverri M.
+*	**Isabel Cristina Cardona S.**
+*	**Julio César Echeverri M.**
 
 
 ### Comentarios
@@ -17,5 +17,5 @@ La aproximación que estamos utilizando para implementar el seguidor de línea c
 * Batería LiPo de 7.4V
 * Convertidor Step-Down (para alimentación de los sensores)
 
-El algoritmo utilizado para superar los 3 obstáculos planteados en el torneo (cuya reglas y categorías se pueden **++ver en este enlace++**), puede ser analizado en el PDF ([Click Aquí](Diagrama_de_Flujo.pdf))
+El algoritmo utilizado para superar los 3 obstáculos planteados en el torneo (cuya reglas y categorías se pueden **~~ver en este enlace~~**), puede ser analizado en el PDF donde a través de un diagrama de flujo se muestran las etapas por las que atravesará la lógica del **Halcón Milenario**(![Click Aquí](Diagrama_de_Flujo.pdf))
 
