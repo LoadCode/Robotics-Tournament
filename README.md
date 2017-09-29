@@ -106,9 +106,9 @@ void loop()
 
     // anti-windup
     if(integral > maxOutput)
-    integral = maxOutput;
+    	integral = maxOutput;
     else if(integral < minOutput)
-    integral = minOutput;
+    	integral = minOutput;
 
     dError = lastPosicion - posicionActual; // dError = -dInput
 
@@ -116,9 +116,10 @@ void loop()
 
     // saturación de la salida
     if(controlOutput > maxOutput)
-    controlOutput = maxOutput;
+    	controlOutput = maxOutput;
     else if(controlOutput < minOutput)
-    controlOutput = minOutput;
+    	controlOutput = minOutput;
+
     lastPosicion = posicionActual;
     /*Finalización del cálculo del controlador*/
 
