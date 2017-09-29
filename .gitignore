@@ -1,0 +1,6 @@
+*.cppproj
+*.old
+*.ini
+*.xml
+Debug/
+__vm/
