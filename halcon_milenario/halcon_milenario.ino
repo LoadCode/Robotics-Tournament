@@ -8,19 +8,19 @@
 #include <TimerOne.h>
 
 #define NUM_SENSORS             6  // numero de sensores utilizados
-#define NUM_SAMPLES_PER_SENSOR  4  // La lectura del sensor será el premedio de 4 muestras
+#define NUM_SAMPLES_PER_SENSOR  4  // La lectura del sensor serï¿½ el premedio de 4 muestras
 #define EMITTER_PIN             2  // Emisor controlado por el pin digital 2
 #define PIN_LED_1               3
 #define PIN_LED_2               5
 #define START_BUTTON            7
-#define POT_POSITION            7 // Entrada analógica 7 (donde está conectado el potenciómetro)
+#define POT_POSITION            7 // Entrada analï¿½gica 7 (donde estï¿½ conectado el potenciï¿½metro)
 
 
 /*Tipos de datos personalizados*/
 enum SemaforoColor {VERDE, ROJO, INDETERMINADO};
 enum Estado {CALIBRANDO, BRECHA_SUPERADA, SEMAFORO_SUPERADO, CARRERA_TERMINADA};
 
-/*Declaración de constantes*/
+/*Declaraciï¿½n de constantes*/
 const int MOTOR_MIN_SPEED = 25;
 const int setpoint = 3200;
 const long int PERIODO = 50000; // Ts = 50 ms
@@ -31,10 +31,10 @@ const double maxOutput = 255;
 const double minOutput = 20;
 
 //https://github.com/pololu/qtr-sensors-arduino/blob/master/examples/QTRAExample/QTRAExample.ino
-/*Declaración de variables/objetos globales*/
+/*Declaraciï¿½n de variables/objetos globales*/
 SemaforoColor Semaforo;
 OrangutanMotors motores;
-//Los sensores 0 a 5 están conectados a las entradas analógicas 0 a 5 respectivamente
+//Los sensores 0 a 5 estï¿½n conectados a las entradas analï¿½gicas 0 a 5 respectivamente
 PololuQTRSensorsAnalog qtra((unsigned char[]) {0, 1, 2, 3, 4, 5}, NUM_SENSORS, NUM_SAMPLES_PER_SENSOR, EMITTER_PIN);
 volatile unsigned int sensorValues[NUM_SENSORS];
 static volatile boolean brechaSuperada    = false;
@@ -53,7 +53,7 @@ volatile double integral       = 0;
 volatile double controlOutput  = 0;
 
 
-/*Declaración de Rutinas*/
+/*Declaraciï¿½n de Rutinas*/
 void CalibracionSensores();
 void CalibracionMotores();
 void CalculoControlador();
@@ -67,7 +67,7 @@ void setup()
 	pinMode(PIN_LED_2, OUTPUT);
 	pinMode(PIN_LED_1, OUTPUT);
 	
-	/*Calibración de los sensores*/
+	/*Calibraciï¿½n de los sensores*/
 	Informacion(CALIBRANDO);
 	CalibracionMotores();
 		
@@ -79,22 +79,29 @@ void setup()
 void loop()
 {
 	// Esperar para iniciar la carrera
-	while(digitalRead(START_BUTTON)); // presionar el botón para iniciar la carrera
+	while(digitalRead(START_BUTTON)); // presionar el botï¿½n para iniciar la carrera
 }
 
 
-void CalibracionMotores()
+void CalibracionSensores()
 {
-	// giro en sentido horario
-	motores.setSpeeds(-60,60);
-	for (int i = 0; i < 20; i++)
-		qtra.calibrate();
-		
-	// giro en sentido anti-horario
-	motores.setSpeeds(60,-60);
-	for (int i = 0; i < 20; i++)
-		qtra.calibrate();
+  // giro en sentido horario
+  for(int j = 0; j<7; j++)
+  {
+    if(j == 0)
+      motores.setSpeeds(-35,35);
+    else if(j%2 == 0)
+      motores.setSpeeds(-70,70);
+    else
+      motores.setSpeeds(70,-70);
+    for (int i = 0; i < 20; i++)
+      qtra.calibrate();
+  }
+  motores.setSpeeds(-35,35);
+  motores.setSpeeds(0,0); //frenado de motores
+  delay(800);
 }
+
 
 void CalculoControlador()
 {
@@ -114,7 +121,7 @@ void CalculoControlador()
 		
 		controlOutput = kp * error + integral + kd * dError;
 		
-		// saturación de la salida
+		// saturaciï¿½n de la salida
 		if(controlOutput > maxOutput)
 			controlOutput = maxOutput;
 		else if(controlOutput < minOutput)
