@@ -7,12 +7,13 @@
 #include <PololuQTRSensors.h>
 #include <TimerOne.h>
 
+
 #define NUM_SENSORS             6  // numero de sensores utilizados
-#define NUM_SAMPLES_PER_SENSOR  4  // La lectura del sensor ser� el premedio de 4 muestras
+#define NUM_SAMPLES_PER_SENSOR  4  // La lectura del sensor será el premedio de 4 muestras
 #define EMITTER_PIN             2  // Emisor controlado por el pin digital 2
-#define PIN_LED_1               3
-#define PIN_LED_2               5
-#define START_BUTTON            7
+#define PIN_LED_1               9
+#define PIN_LED_2               7
+#define START_BUTTON            4
 #define POT_POSITION            7 // Entrada anal�gica 7 (donde est� conectado el potenci�metro)
 
 
@@ -22,13 +23,13 @@ enum Estado {CALIBRANDO, BRECHA_SUPERADA, SEMAFORO_SUPERADO, CARRERA_TERMINADA};
 
 /*Declaraci�n de constantes*/
 const int MOTOR_MIN_SPEED = 25;
-const int setpoint = 3200;
+const int setpoint = 2200;
 const long int PERIODO = 50000; // Ts = 50 ms
-const double kp;
+const double kp = 0.1;
 const double ki;
 const double kd;
 const double maxOutput = 255;
-const double minOutput = 20;
+const double minOutput = 0;
 
 //https://github.com/pololu/qtr-sensors-arduino/blob/master/examples/QTRAExample/QTRAExample.ino
 /*Declaraci�n de variables/objetos globales*/
@@ -41,7 +42,7 @@ static volatile boolean brechaSuperada    = false;
 static volatile boolean semaforoVerde     = false;
 static volatile boolean semaforoDetectado = false;
 static volatile boolean metaDetectada     = false;
-static volatile boolean ejecutarControl   = true;
+static volatile boolean ejecutarControl   = false;
 
 /*Variables para el controlador*/
 volatile double posicionActual = 0;
@@ -51,11 +52,11 @@ volatile double dError         = 0;
 volatile double errSum         = 0;
 volatile double integral       = 0;
 volatile double controlOutput  = 0;
-
+volatile double motorSpeedLeft = 0;
+volatile double motorSpeedRight= 0;
 
 /*Declaraci�n de Rutinas*/
 void CalibracionSensores();
-void CalibracionMotores();
 void CalculoControlador();
 void ObstaculoSuperado(short obstaculo);
 void Informacion(Estado state);
@@ -67,9 +68,9 @@ void setup()
 	pinMode(PIN_LED_2, OUTPUT);
 	pinMode(PIN_LED_1, OUTPUT);
 	
-	/*Calibraci�n de los sensores*/
+	/*Calibración de los sensores*/
 	Informacion(CALIBRANDO);
-	CalibracionMotores();
+	CalibracionSensores();
 		
 	Timer1.initialize(PERIODO);
 	Timer1.attachInterrupt(CalculoControlador);
@@ -78,8 +79,11 @@ void setup()
 
 void loop()
 {
-	// Esperar para iniciar la carrera
-	while(digitalRead(START_BUTTON)); // presionar el bot�n para iniciar la carrera
+  // Esperar para iniciar la carrera
+  while(digitalRead(START_BUTTON)); // presionar el botón para iniciar la carrera
+  ejecutarControl = true;
+  delay(3000);
+  ejecutarControl = false;
 }
 
 
@@ -98,8 +102,9 @@ void CalibracionSensores()
       qtra.calibrate();
   }
   motores.setSpeeds(-35,35);
+  delay(10);
   motores.setSpeeds(0,0); //frenado de motores
-  delay(800);
+  delay(100);
 }
 
 
@@ -108,6 +113,7 @@ void CalculoControlador()
 	posicionActual = qtra.readLine(sensorValues);
 	if (ejecutarControl)
 	{
+    /*Inicia el cálculo del PID*/
 		error = setpoint - posicionActual;
 		integral += ki * error;
 		
@@ -121,13 +127,31 @@ void CalculoControlador()
 		
 		controlOutput = kp * error + integral + kd * dError;
 		
-		// saturaci�n de la salida
+		// saturación de la salida
 		if(controlOutput > maxOutput)
 			controlOutput = maxOutput;
 		else if(controlOutput < minOutput)
 			controlOutput = minOutput;
 		
 		lastPosicion = posicionActual;
+    /*Finaliza el cálculo del PID*/
+
+    /*Actualización del control de los motores*/
+    motorSpeedLeft  = MOTOR_MIN_SPEED - controlOutput;
+    motorSpeedRight = MOTOR_MIN_SPEED + controlOutput;
+
+    // Verifica que los valores de salida estén dentro de los rangos numéricos aceptados por los motores
+    if(motorSpeedLeft > maxOutput)
+      motorSpeedLeft = maxOutput;
+    if(motorSpeedRight > maxOutput)
+      motorSpeedRight = maxOutput;
+    if(motorSpeedLeft < 0)
+      motorSpeedLeft = 0;
+    if(motorSpeedRight < 0)
+      motorSpeedRight = 0;
+      
+    motores.setSpeeds(motorSpeedRight, motorSpeedRight);
+    
 	}
 }
 
