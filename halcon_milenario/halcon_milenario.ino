@@ -14,7 +14,7 @@
 #define PIN_LED_1               9
 #define PIN_LED_2               7
 #define START_BUTTON            4
-#define POT_POSITION            7 // Entrada anal�gica 7 (donde est� conectado el potenci�metro)
+#define POT_POSITION            7 // Entrada analógica 7 (donde está conectado el potenci�metro)
 
 
 /*Tipos de datos personalizados*/
@@ -22,20 +22,21 @@ enum SemaforoColor {VERDE, ROJO, INDETERMINADO};
 enum Estado {CALIBRANDO, BRECHA_SUPERADA, SEMAFORO_SUPERADO, CARRERA_TERMINADA};
 
 /*Declaraci�n de constantes*/
-const int MOTOR_MIN_SPEED = 25;
-const int setpoint = 2200;
-const long int PERIODO = 50000; // Ts = 50 ms
-const double kp = 0.1;
-const double ki;
-const double kd;
+const int MOTOR_MIN_SPEED = 100;
+const int MOTOR_MAX_SPEED = 254;
+const int setpoint = 2500;
+const long int PERIODO = 23000; // Ts = 23 ms
+const double kp = 0.09;
+const double ki = 0.001;
+const double kd = 0.007;
 const double maxOutput = 255;
-const double minOutput = 0;
+const double minOutput = -255;
 
 //https://github.com/pololu/qtr-sensors-arduino/blob/master/examples/QTRAExample/QTRAExample.ino
 /*Declaraci�n de variables/objetos globales*/
 SemaforoColor Semaforo;
 OrangutanMotors motores;
-//Los sensores 0 a 5 est�n conectados a las entradas anal�gicas 0 a 5 respectivamente
+//Los sensores 0 a 5 están conectados a las entradas anal�gicas 0 a 5 respectivamente
 PololuQTRSensorsAnalog qtra((unsigned char[]) {0, 1, 2, 3, 4, 5}, NUM_SENSORS, NUM_SAMPLES_PER_SENSOR, EMITTER_PIN);
 volatile unsigned int sensorValues[NUM_SENSORS];
 static volatile boolean brechaSuperada    = false;
@@ -43,6 +44,7 @@ static volatile boolean semaforoVerde     = false;
 static volatile boolean semaforoDetectado = false;
 static volatile boolean metaDetectada     = false;
 static volatile boolean ejecutarControl   = false;
+boolean ejecucion = true;
 
 /*Variables para el controlador*/
 volatile double posicionActual = 0;
@@ -69,9 +71,10 @@ void setup()
 	pinMode(PIN_LED_1, OUTPUT);
 	
 	/*Calibración de los sensores*/
+  while(digitalRead(START_BUTTON));
 	Informacion(CALIBRANDO);
 	CalibracionSensores();
-		
+	digitalWrite(PIN_LED_1, LOW);	
 	Timer1.initialize(PERIODO);
 	Timer1.attachInterrupt(CalculoControlador);
 }
@@ -79,11 +82,21 @@ void setup()
 
 void loop()
 {
-  // Esperar para iniciar la carrera
   while(digitalRead(START_BUTTON)); // presionar el botón para iniciar la carrera
-  ejecutarControl = true;
-  delay(3000);
-  ejecutarControl = false;
+  ejecucion = true;
+  while(ejecucion == true)
+  { 
+    while(!digitalRead(START_BUTTON)) // se mantiene ejecutando el ciclo mientras el botón no sea presionado
+    {
+      ejecutarControl = true;
+      delay(15000);
+      ejecutarControl = false;
+      motores.setSpeeds(0,0); 
+    }
+    if(digitalRead(START_BUTTON))
+      ejecucion = false;
+  }
+  
 }
 
 
@@ -93,16 +106,16 @@ void CalibracionSensores()
   for(int j = 0; j<7; j++)
   {
     if(j == 0)
-      motores.setSpeeds(-35,35);
+      motores.setSpeeds(35,-35);
     else if(j%2 == 0)
-      motores.setSpeeds(-70,70);
-    else
       motores.setSpeeds(70,-70);
+    else
+      motores.setSpeeds(-70,70);
     for (int i = 0; i < 20; i++)
       qtra.calibrate();
   }
   motores.setSpeeds(-35,35);
-  delay(10);
+  delay(550);
   motores.setSpeeds(0,0); //frenado de motores
   delay(100);
 }
@@ -117,7 +130,7 @@ void CalculoControlador()
 		error = setpoint - posicionActual;
 		integral += ki * error;
 		
-		// anti-windup
+		// anti-windup (ajuste excesivo)
 		if(integral > maxOutput)
 			integral = maxOutput;
 		else if(integral < minOutput)
@@ -137,21 +150,24 @@ void CalculoControlador()
     /*Finaliza el cálculo del PID*/
 
     /*Actualización del control de los motores*/
-    motorSpeedLeft  = MOTOR_MIN_SPEED - controlOutput;
-    motorSpeedRight = MOTOR_MIN_SPEED + controlOutput;
+    motorSpeedLeft  = MOTOR_MIN_SPEED + controlOutput;
+    motorSpeedRight = MOTOR_MIN_SPEED - controlOutput;
 
     // Verifica que los valores de salida estén dentro de los rangos numéricos aceptados por los motores
-    if(motorSpeedLeft > maxOutput)
-      motorSpeedLeft = maxOutput;
-    if(motorSpeedRight > maxOutput)
-      motorSpeedRight = maxOutput;
-    if(motorSpeedLeft < 0)
-      motorSpeedLeft = 0;
-    if(motorSpeedRight < 0)
-      motorSpeedRight = 0;
+    if(motorSpeedLeft > MOTOR_MAX_SPEED)
+      motorSpeedLeft = MOTOR_MAX_SPEED;
+    if(motorSpeedRight > MOTOR_MAX_SPEED)
+      motorSpeedRight = MOTOR_MAX_SPEED;
+    if(motorSpeedLeft < MOTOR_MIN_SPEED)
+      motorSpeedLeft = MOTOR_MIN_SPEED;
+    if(motorSpeedRight < MOTOR_MIN_SPEED)
+      motorSpeedRight = MOTOR_MIN_SPEED;
       
-    motores.setSpeeds(motorSpeedRight, motorSpeedRight);
-    
+    motores.setSpeeds(motorSpeedLeft,motorSpeedRight);
+    if(posicionActual <= 2500)// && posicionActual >= 6000)
+      digitalWrite(PIN_LED_1, HIGH);
+    else
+      digitalWrite(PIN_LED_1, LOW);
 	}
 }
 
@@ -161,12 +177,12 @@ void Informacion(Estado state)
 	switch (state)
 	{
 		case CALIBRANDO:
-			digitalWrite(PIN_LED_1, LOW);
-			digitalWrite(PIN_LED_2, HIGH);
-			break;
-		case BRECHA_SUPERADA:
 			digitalWrite(PIN_LED_1, HIGH);
 			digitalWrite(PIN_LED_2, LOW);
+			break;
+		case BRECHA_SUPERADA:
+			digitalWrite(PIN_LED_1, LOW);
+			digitalWrite(PIN_LED_2, HIGH);
 			break;
 		case SEMAFORO_SUPERADO:
 			digitalWrite(PIN_LED_1, HIGH);
@@ -179,86 +195,3 @@ void Informacion(Estado state)
 	}
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*                // USE THIS CODE TO VERIFY THE FUNCTIONALLITY OF THE TIMER LIB IN BABY ORANGUTAN
-#include "TimerOne/TimerOne.h"
-
-#define LED_PIN 8
-#define TS      50000  // 50ms period
-
-
-void ControllerCompute();
-
-
-void setup()
-{
-	pinMode(LED_PIN, OUTPUT);
-	Timer1.initialize(TS);
-	Timer1.attachInterrupt(ControllerCompute);
-	Serial.begin(9600);
-}
-
-void loop()
-{
-	delay(500);
-}
-
-void ControllerCompute()
-{
-	Serial.println("Calculando PID");
-}
-*/
-
-
-/*  Alternative way of calling the library 
-#include "OrangutanMotors/OrangutanMotors.h"
-#include "TimerOne/TimerOne.h"
-#include "PololuQTRSensors/PololuQTRSensors.h"
-*/
