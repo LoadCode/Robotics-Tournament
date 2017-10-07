@@ -22,11 +22,11 @@ enum SemaforoColor {VERDE, ROJO, INDETERMINADO};
 enum Estado {CALIBRANDO, BRECHA_SUPERADA, SEMAFORO_SUPERADO, CARRERA_TERMINADA};
 
 /*Declaraci�n de constantes*/
-const int MOTOR_MIN_SPEED = 100;
-const int MOTOR_MAX_SPEED = 254;
+const int MOTOR_MIN_SPEED = 80;
+const int MOTOR_MAX_SPEED = 240;
 const int setpoint = 2500;
 const long int PERIODO = 23000; // Ts = 23 ms
-const double kp = 0.09;
+const double kp = 0.08;
 const double ki = 0.001;
 const double kd = 0.007;
 const double maxOutput = 255;
