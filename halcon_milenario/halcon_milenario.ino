@@ -3,6 +3,7 @@
  * Author: Julio Echeverri - Isabel Cardona
  */ 
 
+#define DEPURAR
 #include <OrangutanMotors.h>
 #include <PololuQTRSensors.h>
 #include <TimerOne.h>
@@ -14,21 +15,22 @@
 #define PIN_LED_1               9
 #define PIN_LED_2               7
 #define START_BUTTON            4
-#define POT_POSITION            7 // Entrada analógica 7 (donde está conectado el potenci�metro)
-
+#define POT_POSITION            7 // Entrada analógica 7 (donde está conectado el potenciómetro)
+#define VALUE_ZONE_WHITE        400
 
 /*Tipos de datos personalizados*/
 enum SemaforoColor {VERDE, ROJO, INDETERMINADO};
 enum Estado {CALIBRANDO, BRECHA_SUPERADA, SEMAFORO_SUPERADO, CARRERA_TERMINADA};
 
 /*Declaraci�n de constantes*/
-const int MOTOR_MIN_SPEED = 80;
-const int MOTOR_MAX_SPEED = 240;
+const int MOTOR_MIN_SPEED = 168;
+const int MOTOR_MAX_SPEED = 254;
+const int pista = A7;
 const int setpoint = 2500;
-const long int PERIODO = 23000; // Ts = 23 ms
-const double kp = 0.08;
-const double ki = 0.001;
-const double kd = 0.007;
+const long int PERIODO = 20000; // Ts = 17 ms
+const double kp = 60;  //0.05
+const double ki = 0.007; //0.001
+const double kd = 90;//0.17;  // 0.00
 const double maxOutput = 255;
 const double minOutput = -255;
 
@@ -44,21 +46,22 @@ static volatile boolean semaforoVerde     = false;
 static volatile boolean semaforoDetectado = false;
 static volatile boolean metaDetectada     = false;
 static volatile boolean ejecutarControl   = false;
-boolean ejecucion = true;
+static volatile boolean pistaR            = false;
 
 /*Variables para el controlador*/
-volatile double posicionActual = 0;
-volatile double error          = 0;
-volatile double lastPosicion   = 0;
-volatile double dError         = 0;
-volatile double errSum         = 0;
-volatile double integral       = 0;
-volatile double controlOutput  = 0;
-volatile double motorSpeedLeft = 0;
-volatile double motorSpeedRight= 0;
+volatile double posicionActual  = 0;
+volatile double error           = 0;
+volatile double lastPosicion    = 0;
+volatile double dError          = 0;
+volatile double errSum          = 0;
+volatile double integral        = 0;
+volatile double controlOutput   = 0;
+volatile double motorSpeedLeft  = 0;
+volatile double motorSpeedRight = 0;
 
-/*Declaraci�n de Rutinas*/
+/*Declaración de Rutinas*/
 void CalibracionSensores();
+void Brecha();
 void CalculoControlador();
 void ObstaculoSuperado(short obstaculo);
 void Informacion(Estado state);
@@ -69,12 +72,18 @@ void setup()
 {
 	pinMode(PIN_LED_2, OUTPUT);
 	pinMode(PIN_LED_1, OUTPUT);
-	
+  
+  #ifdef DEPURAR
+    Serial.begin(9600);
+    Serial.print("Posicion    PID    MDer    MIzq");
+  #endif
+  
 	/*Calibración de los sensores*/
   while(digitalRead(START_BUTTON));
 	Informacion(CALIBRANDO);
 	CalibracionSensores();
-	digitalWrite(PIN_LED_1, LOW);	
+
+  /*Configuración de la interrupción por TIMER*/
 	Timer1.initialize(PERIODO);
 	Timer1.attachInterrupt(CalculoControlador);
 }
@@ -83,25 +92,37 @@ void setup()
 void loop()
 {
   while(digitalRead(START_BUTTON)); // presionar el botón para iniciar la carrera
-  ejecucion = true;
-  while(ejecucion == true)
-  { 
-    while(!digitalRead(START_BUTTON)) // se mantiene ejecutando el ciclo mientras el botón no sea presionado
+  ejecutarControl = true;
+  delay(1000);
+  #ifdef DEPURAR
+    while(1)
     {
-      ejecutarControl = true;
-      delay(15000);
-      ejecutarControl = false;
-      motores.setSpeeds(0,0); 
+      Serial.print(posicionActual + "    " + controlOutput + "    " + motorSpeedLeft + "    " + motorSpeedRight);
+      delay(100);
     }
-    if(digitalRead(START_BUTTON))
-      ejecucion = false;
-  }
-  
+  #else
+    //Brecha();
+    while(digitalRead(START_BUTTON));
+    ejecutarControl = false;
+    motores.setSpeeds(0,0);
+  #endif
 }
 
 
 void CalibracionSensores()
 {
+  analogRead(pista);
+  if(pista < 200)
+  {
+    pistaR = true;
+    digitalWrite(PIN_LED_1, HIGH);
+  }
+  else
+  {
+    pistaR = false;
+    digitalWrite(PIN_LED_2, HIGH);
+  }
+  
   // giro en sentido horario
   for(int j = 0; j<7; j++)
   {
@@ -150,8 +171,8 @@ void CalculoControlador()
     /*Finaliza el cálculo del PID*/
 
     /*Actualización del control de los motores*/
-    motorSpeedLeft  = MOTOR_MIN_SPEED + controlOutput;
-    motorSpeedRight = MOTOR_MIN_SPEED - controlOutput;
+    motorSpeedLeft  = MOTOR_MIN_SPEED - controlOutput;
+    motorSpeedRight = MOTOR_MIN_SPEED + controlOutput;
 
     // Verifica que los valores de salida estén dentro de los rangos numéricos aceptados por los motores
     if(motorSpeedLeft > MOTOR_MAX_SPEED)
@@ -162,9 +183,13 @@ void CalculoControlador()
       motorSpeedLeft = MOTOR_MIN_SPEED;
     if(motorSpeedRight < MOTOR_MIN_SPEED)
       motorSpeedRight = MOTOR_MIN_SPEED;
-      
-    motores.setSpeeds(motorSpeedLeft,motorSpeedRight);
-    if(posicionActual <= 2500)// && posicionActual >= 6000)
+
+    if(controlOutput < 0)
+      motores.setSpeeds(MOTOR_MIN_SPEED, motorSpeedLeft);
+    else
+      motores.setSpeeds(motorSpeedRight, MOTOR_MIN_SPEED);
+    
+    if(posicionActual <= 2500)
       digitalWrite(PIN_LED_1, HIGH);
     else
       digitalWrite(PIN_LED_1, LOW);
@@ -193,5 +218,18 @@ void Informacion(Estado state)
 			digitalWrite(PIN_LED_2, LOW);
 			break;
 	}
+}
+
+
+void Brecha()
+{
+  while(posicionActual > VALUE_ZONE_WHITE);
+    ejecutarControl   = false;
+  if(pistaR == true)
+    motores.setSpeeds(25,30);
+  else
+    motores.setSpeeds(0,0);
+  while(posicionActual < VALUE_ZONE_WHITE);
+    ejecutarControl   = true;  
 }
 
