@@ -3,7 +3,8 @@
  * Author: Julio Echeverri - Isabel Cardona
  */ 
 
-#define DEPURAR
+//#define DEPURAR
+#define NEW
 #include <OrangutanMotors.h>
 #include <PololuQTRSensors.h>
 #include <TimerOne.h>
@@ -16,30 +17,32 @@
 #define PIN_LED_2               7
 #define START_BUTTON            4
 #define POT_POSITION            7 // Entrada analógica 7 (donde está conectado el potenciómetro)
-#define VALUE_ZONE_WHITE        400
+#define VALUE_ZONE_WHITE        100
+#define ALL_BLACK_ZONE          5000 //Really?
 
 /*Tipos de datos personalizados*/
 enum SemaforoColor {VERDE, ROJO, INDETERMINADO};
 enum Estado {CALIBRANDO, BRECHA_SUPERADA, SEMAFORO_SUPERADO, CARRERA_TERMINADA};
 
-/*Declaraci�n de constantes*/
-const int MOTOR_MIN_SPEED = 168;
+/*Declaración de constantes*/
+const int MOTOR_MIN_SPEED = 212;
 const int MOTOR_MAX_SPEED = 254;
 const int pista = A7;
 const int setpoint = 2500;
 const long int PERIODO = 20000; // Ts = 17 ms
-const double kp = 60;  //0.05
-const double ki = 0.007; //0.001
-const double kd = 90;//0.17;  // 0.00
+const double kp = 0.8; //60;  //0.05
+const double ki = 0.002; //0.001
+const double kd = 1.5; //90;//0.17;  // 0.00
 const double maxOutput = 255;
 const double minOutput = -255;
+const double slice = 0.85; //0.3;
 
 //https://github.com/pololu/qtr-sensors-arduino/blob/master/examples/QTRAExample/QTRAExample.ino
 /*Declaraci�n de variables/objetos globales*/
 SemaforoColor Semaforo;
 OrangutanMotors motores;
 //Los sensores 0 a 5 están conectados a las entradas anal�gicas 0 a 5 respectivamente
-PololuQTRSensorsAnalog qtra((unsigned char[]) {0, 1, 2, 3, 4, 5}, NUM_SENSORS, NUM_SAMPLES_PER_SENSOR, EMITTER_PIN);
+PololuQTRSensorsAnalog qtra((unsigned char[]) {0, 1, 2, 3, 4, 5}, NUM_SENSORS, NUM_SAMPLES_PER_SENSOR);//, EMITTER_PIN);
 volatile unsigned int sensorValues[NUM_SENSORS];
 static volatile boolean brechaSuperada    = false;
 static volatile boolean semaforoVerde     = false;
@@ -97,7 +100,13 @@ void loop()
   #ifdef DEPURAR
     while(1)
     {
-      Serial.print(posicionActual + "    " + controlOutput + "    " + motorSpeedLeft + "    " + motorSpeedRight);
+      Serial.print(posicionActual); 
+      Serial.print("    ");
+      Serial.print(controlOutput);
+      Serial.print("    ");
+      Serial.print(motorSpeedLeft);
+      Serial.print("    ");
+      Serial.println(motorSpeedRight);
       delay(100);
     }
   #else
@@ -105,6 +114,7 @@ void loop()
     while(digitalRead(START_BUTTON));
     ejecutarControl = false;
     motores.setSpeeds(0,0);
+    delay(1000);
   #endif
 }
 
@@ -160,34 +170,75 @@ void CalculoControlador()
 		dError = lastPosicion - posicionActual; // dError = -dInput
 		
 		controlOutput = kp * error + integral + kd * dError;
-		
-		// saturación de la salida
-		if(controlOutput > maxOutput)
-			controlOutput = maxOutput;
-		else if(controlOutput < minOutput)
-			controlOutput = minOutput;
-		
+
+    #ifndef NEW  // Para el nuevo esquema de control la salida puede tomar valores más altos que +-255
+    		// saturación de la salida del PID
+    		if(controlOutput > maxOutput)
+    			controlOutput = maxOutput;
+    		else if(controlOutput < minOutput)
+    			controlOutput = minOutput;
+    #else
+        // saturación de la salida del PID
+        if(controlOutput > 360)
+          controlOutput = 360;
+        else if(controlOutput < -360)
+          controlOutput = -360;
+		#endif
 		lastPosicion = posicionActual;
     /*Finaliza el cálculo del PID*/
 
     /*Actualización del control de los motores*/
-    motorSpeedLeft  = MOTOR_MIN_SPEED - controlOutput;
-    motorSpeedRight = MOTOR_MIN_SPEED + controlOutput;
+    #ifndef NEW
+        motorSpeedLeft  = MOTOR_MIN_SPEED - controlOutput;
+        motorSpeedRight = MOTOR_MIN_SPEED + controlOutput;
+    
+        // Verifica que los valores de salida estén dentro de los rangos numéricos aceptados por los motores
+        if(motorSpeedLeft > MOTOR_MAX_SPEED)
+          motorSpeedLeft = MOTOR_MAX_SPEED;
+        if(motorSpeedRight > MOTOR_MAX_SPEED)
+          motorSpeedRight = MOTOR_MAX_SPEED;
+        if(motorSpeedLeft < MOTOR_MIN_SPEED)
+          motorSpeedLeft = MOTOR_MIN_SPEED;
+        if(motorSpeedRight < MOTOR_MIN_SPEED)
+          motorSpeedRight = MOTOR_MIN_SPEED;
+    
+        if(controlOutput < 0)
+          motores.setSpeeds(MOTOR_MIN_SPEED, motorSpeedLeft);
+        else
+          motores.setSpeeds(motorSpeedRight, MOTOR_MIN_SPEED);
+    #else
+        double temp    = 0.0;
+        double offset  = 0.0;
+        double control = 0.0;
+        
+        if(controlOutput < 0)
+        {
+          // saturación de la salida del PID
+          control = (controlOutput < minOutput) ? minOutput : controlOutput;
+          motorSpeedLeft = MOTOR_MIN_SPEED - control;
+          temp = minOutput - controlOutput;
+          offset = (temp > 0) ? temp : 0.0;
+          motorSpeedRight = MOTOR_MIN_SPEED - offset*slice;
+        }
+        else
+        {
+          // saturación de la salida del PID
+          control = (controlOutput > maxOutput) ? maxOutput : controlOutput;
+          motorSpeedRight = MOTOR_MIN_SPEED + control;
+          temp = maxOutput - controlOutput;
+          offset = (temp < 0) ? temp : 0.0;
+          motorSpeedLeft = MOTOR_MIN_SPEED + offset*slice;
+        }
 
-    // Verifica que los valores de salida estén dentro de los rangos numéricos aceptados por los motores
-    if(motorSpeedLeft > MOTOR_MAX_SPEED)
-      motorSpeedLeft = MOTOR_MAX_SPEED;
-    if(motorSpeedRight > MOTOR_MAX_SPEED)
-      motorSpeedRight = MOTOR_MAX_SPEED;
-    if(motorSpeedLeft < MOTOR_MIN_SPEED)
-      motorSpeedLeft = MOTOR_MIN_SPEED;
-    if(motorSpeedRight < MOTOR_MIN_SPEED)
-      motorSpeedRight = MOTOR_MIN_SPEED;
+        // Saturación para el valor enviado a los motores
+        motorSpeedRight = (motorSpeedRight > MOTOR_MAX_SPEED)?MOTOR_MAX_SPEED:motorSpeedRight;
+        motorSpeedRight = (motorSpeedRight < 0)?0:motorSpeedRight;
+        motorSpeedLeft  = (motorSpeedLeft  > MOTOR_MAX_SPEED)?MOTOR_MAX_SPEED:motorSpeedLeft;
+        motorSpeedLeft = (motorSpeedLeft < 0)?0:motorSpeedLeft;
 
-    if(controlOutput < 0)
-      motores.setSpeeds(MOTOR_MIN_SPEED, motorSpeedLeft);
-    else
-      motores.setSpeeds(motorSpeedRight, MOTOR_MIN_SPEED);
+        // Salida hacia los motores
+        motores.setSpeeds(motorSpeedRight, motorSpeedLeft);
+    #endif
     
     if(posicionActual <= 2500)
       digitalWrite(PIN_LED_1, HIGH);
